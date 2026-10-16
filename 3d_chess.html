@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#10151e" />
+  <title>Aether Chess — 3D Chess</title>
+  <style>
+    :root {
+      --bg: #0b1017;
+      --surface: rgba(22, 29, 40, .88);
+      --surface-2: #1b2431;
+      --surface-3: #242f3f;
+      --line: rgba(255,255,255,.09);
+      --text: #edf2f8;
+      --muted: #96a5b8;
+      --gold: #e0bd7b;
+      --gold-2: #b98c4b;
+      --green: #82c9a1;
+      --red: #e78b87;
+      --shadow: 0 24px 65px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { background: radial-gradient(ellipse at 50% -15%, #28384a 0%, #121a25 42%, #0a0f16 82%); }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+    .app { width: min(1540px, 100%); margin: 0 auto; padding: 22px clamp(14px, 2.6vw, 38px) 26px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 3px 0 24px; }
+    .brand { display:flex; align-items:center; gap:13px; min-width:0; }
+    .brand-mark { width: 42px; height:42px; border-radius:14px; display:grid; place-items:center; color:#171b21; background:linear-gradient(145deg,#f5dfae,#bb8e50); box-shadow:0 8px 26px rgba(224,189,123,.18); font-size:25px; }
+    .brand-name { font-size:16px; letter-spacing:.17em; font-weight:800; line-height:1.15; }
+    .brand-sub { margin-top:5px; color:var(--muted); font-size:10px; letter-spacing:.21em; text-transform:uppercase; }
+    .top-actions { display:flex; align-items:center; gap:10px; }
+    .pill { display:flex; align-items:center; gap:8px; border:1px solid var(--line); background:rgba(255,255,255,.035); color:#b8c4d3; border-radius:100px; padding:9px 13px; font-size:12px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px rgba(130,201,161,.1); }
+    .icon-btn { width:42px; height:42px; display:grid; place-items:center; border:1px solid var(--line); border-radius:13px; color:var(--text); background:rgba(255,255,255,.055); transition:.2s; }
+    .icon-btn:hover { background:rgba(255,255,255,.11); border-color:rgba(224,189,123,.42); }
+    .dots { font-size:26px; line-height:1; transform:translateY(-3px); letter-spacing:-2px; }
+    .layout { display:grid; grid-template-columns:minmax(0, 1fr) 320px; align-items:stretch; gap:20px; }
+    .board-panel, .card { border:1px solid var(--line); background:linear-gradient(150deg,rgba(26,35,48,.94),rgba(15,21,30,.94)); border-radius:22px; box-shadow:var(--shadow); }
+    .board-panel { padding:17px; min-width:0; overflow:hidden; }
+    .board-head { display:flex; justify-content:space-between; align-items:center; gap:14px; padding:2px 3px 15px; }
+    .board-heading { font-size:14px; font-weight:750; letter-spacing:.015em; }
+    .board-caption { color:var(--muted); font-size:11px; margin-top:5px; }
+    .board-toolbar { display:flex; gap:7px; }
+    .small-btn { border:1px solid var(--line); color:#bdc9d7; background:rgba(255,255,255,.045); border-radius:10px; min-height:34px; padding:0 11px; font-size:11px; display:flex; gap:7px; align-items:center; justify-content:center; }
+    .small-btn:hover { border-color:rgba(224,189,123,.45); color:var(--gold); }
+    .board-wrap { position:relative; border:1px solid rgba(255,255,255,.05); border-radius:17px; overflow:hidden; min-height:390px; background:radial-gradient(ellipse at 50% 34%,#293747,#141c28 68%,#101720); }
+    #boardCanvas { display:block; width:100%; height:clamp(440px, 64vh, 720px); touch-action:pan-y; outline:none; }
+    .board-vignette { pointer-events:none; position:absolute; inset:0; box-shadow:inset 0 0 55px rgba(0,0,0,.18); border-radius:17px; }
+    .board-bottom { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:15px 3px 1px; }
+    .legend { display:flex; align-items:center; gap:13px; color:var(--muted); font-size:11px; }
+    .legend span { display:inline-flex; align-items:center; gap:6px; }
+    .legend-dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
+    .drag-note { color:#7e8da0; font-size:11px; }
+    .side { display:flex; flex-direction:column; gap:14px; min-width:0; }
+    .card { padding:17px; }
+    .card-title-row { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:15px; }
+    .card-title { font-weight:750; font-size:13px; letter-spacing:.01em; }
+    .eyebrow { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.13em; }
+    .turn-top { display:flex; align-items:center; gap:12px; }
+    .turn-piece { width:45px;height:45px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(150deg,#f4e9d2,#c8b38e); color:#222831;font-size:25px;box-shadow:inset 0 1px 0 rgba(255,255,255,.6); }
+    .turn-piece.black { background:linear-gradient(150deg,#384456,#1e2734); color:#f2e8d6; border:1px solid rgba(255,255,255,.08); }
+    .turn-name { font-size:17px; font-weight:750; }
+    .turn-mode { color:var(--muted); font-size:11px; margin-top:5px; }
+    .status-line { margin-top:16px; padding:11px 12px; display:flex; gap:9px; align-items:center; border-radius:12px; background:rgba(130,201,161,.085); border:1px solid rgba(130,201,161,.13); color:#b6e4c8; font-size:12px; }
+    .status-line.warning { color:#f2c7a1; background:rgba(224,170,106,.08); border-color:rgba(224,170,106,.15); }
+    .status-icon { width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:rgba(130,201,161,.15);font-weight:800;font-size:12px; }
+    .stats { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:15px; }
+    .stat { padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.055); }
+    .stat-label { color:var(--muted);font-size:10px;letter-spacing:.07em;text-transform:uppercase; }
+    .stat-value { margin-top:6px;font-size:17px;font-weight:750; }
+    .stat-value.gold { color:var(--gold); }
+    .moves-card { flex:1; min-height:250px; display:flex; flex-direction:column; }
+    .move-count { color:var(--muted);font-size:11px; }
+    .move-list { overflow:auto; max-height:285px; min-height:135px; padding-right:3px; scrollbar-width:thin; scrollbar-color:#3a4757 transparent; }
+    .move-row { display:grid;grid-template-columns:34px 1fr 1fr;align-items:center;min-height:34px;border-radius:8px;padding:0 8px;font-size:12px; }
+    .move-row:nth-child(odd) { background:rgba(255,255,255,.025); }
+    .move-number { color:#718198;font-size:10px; }
+    .move-san { font-weight:650;color:#dce4ee; }
+    .move-san.last { color:var(--gold); }
+    .empty-moves { color:#748398;font-size:12px;line-height:1.65;padding:16px 7px; }
+    .captured-wrap { margin-top:14px;padding-top:13px;border-top:1px solid var(--line); }
+    .captured-title { color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px; }
+    .captured-pieces { min-height:24px;display:flex;flex-wrap:wrap;gap:3px;font-size:19px; }
+    .captured-pieces .taken { opacity:.78; }
+    .taken.light { color:#eadfc9;text-shadow:0 1px 2px #000; }
+    .taken.dark { color:#8290a3; }
+    .analysis-btn { border:0;border-radius:13px;width:100%;padding:14px 15px;display:flex;align-items:center;justify-content:center;gap:9px;font-weight:800;font-size:12px;letter-spacing:.02em;color:#201b13;background:linear-gradient(135deg,#f0d59c,#c79857);box-shadow:0 8px 24px rgba(199,152,87,.15);transition:transform .18s,filter .18s; }
+    .analysis-btn:hover { transform:translateY(-1px);filter:brightness(1.06); }
+    .analysis-icon { font-size:17px; }
+    .analysis-note { color:#8493a7;font-size:10px;line-height:1.55;margin:10px 3px 0; }
+    .footer { display:flex;justify-content:space-between;gap:12px;padding:19px 3px 0;color:#657488;font-size:10px; }
+    .footer strong { color:#9ba9ba;font-weight:650; }
+    .menu-popover { position:fixed;z-index:20;top:75px;right:max(14px, calc((100vw - 1460px)/2 + 38px));width:278px;padding:9px;border:1px solid rgba(255,255,255,.12);border-radius:17px;background:rgba(20,27,38,.97);box-shadow:0 25px 80px rgba(0,0,0,.55);backdrop-filter:blur(18px);display:none; }
+    .menu-popover.open { display:block;animation:menuIn .16s ease-out; }
+    @keyframes menuIn { from { opacity:0;transform:translateY(-5px) scale(.99); } to { opacity:1;transform:none; } }
+    .menu-head { display:flex;justify-content:space-between;align-items:center;padding:7px 9px 11px;border-bottom:1px solid var(--line);margin-bottom:5px; }
+    .menu-head strong { font-size:12px; }
+    .menu-head span { color:var(--muted);font-size:10px; }
+    .menu-section-label { padding:10px 9px 5px;color:#7e8ca0;font-size:9px;font-weight:800;letter-spacing:.14em;text-transform:uppercase; }
+    .menu-item { width:100%;border:0;background:transparent;color:#dce4ed;text-align:left;border-radius:10px;padding:10px 9px;display:flex;align-items:center;gap:10px;font-size:12px; }
+    .menu-item:hover { background:rgba(255,255,255,.06); }
+    .menu-item .mi-icon { width:23px;text-align:center;font-size:15px;color:var(--gold); }
+    .menu-item .mi-sub { display:block;color:#8190a5;font-size:10px;margin-top:3px;line-height:1.3; }
+    .menu-item .check { margin-left:auto;color:var(--green);font-size:14px; }
+    .menu-select { margin:5px 8px 7px;width:calc(100% - 16px);border:1px solid var(--line);background:#1c2634;color:#e7edf5;border-radius:9px;padding:9px;font-size:11px; }
+    .menu-separator { border-top:1px solid var(--line);margin:6px 4px; }
+    .toast { position:fixed;z-index:30;left:50%;bottom:25px;transform:translate(-50%,20px);opacity:0;pointer-events:none;padding:12px 16px;border-radius:12px;border:1px solid rgba(224,189,123,.25);background:#1a2431;color:#f2e6d1;font-size:12px;box-shadow:0 12px 40px #0008;transition:.25s;max-width:min(92vw,540px);text-align:center; }
+    .toast.show { opacity:1;transform:translate(-50%,0); }
+    .modal-backdrop { position:fixed;z-index:25;inset:0;background:rgba(3,7,12,.73);backdrop-filter:blur(7px);display:none;place-items:center;padding:18px; }
+    .modal-backdrop.open { display:grid; }
+    .modal { width:min(390px,100%);border-radius:19px;border:1px solid var(--line);background:#18212d;padding:20px;box-shadow:0 25px 90px #000a; }
+    .modal h2 { font-size:16px;margin:0 0 7px; }
+    .modal p { color:var(--muted);font-size:12px;line-height:1.6;margin:0 0 16px; }
+    .promotion-options { display:grid;grid-template-columns:repeat(4,1fr);gap:8px; }
+    .promotion-options button { border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.04);color:var(--text);padding:12px 4px;font-size:25px; }
+    .promotion-options button:hover { border-color:var(--gold);background:rgba(224,189,123,.08); }
+    .promotion-options small { display:block;color:var(--muted);font-size:9px;margin-top:5px; }
+    .noscript { margin:24px;padding:20px;background:#2b1e1e;border-radius:12px;color:white; }
+    @media (max-width: 1060px) {
+      .layout { grid-template-columns:minmax(0,1fr) 285px;gap:14px; }
+      .board-panel { padding:12px; }
+      #boardCanvas { height:clamp(420px,58vh,650px); }
+      .card { padding:14px; }
+    }
+    @media (max-width: 800px) {
+      .app { padding:14px 12px 20px; }
+      .topbar { padding-bottom:15px; }
+      .pill { display:none; }
+      .layout { grid-template-columns:1fr; }
+      .side { display:grid;grid-template-columns:1fr 1fr;align-items:stretch; }
+      .status-card { grid-column:1 / -1; }
+      .moves-card { min-height:230px; }
+      #boardCanvas { height:clamp(370px,64vw,570px); }
+      .menu-popover { top:68px;right:12px; }
+    }
+    @media (max-width: 520px) {
+      .brand-mark { width:38px;height:38px; }
+      .brand-name { font-size:14px; }
+      .brand-sub { font-size:9px;letter-spacing:.12em; }
+      .board-head { align-items:flex-start; }
+      .board-toolbar { flex-shrink:0; }
+      .small-btn { padding:0 8px; }
+      #boardCanvas { height:clamp(330px,88vw,450px); }
+      .board-wrap { min-height:320px; }
+      .side { grid-template-columns:1fr; }
+      .status-card { grid-column:auto; }
+      .footer { flex-direction:column; }
+      .drag-note { max-width:180px;text-align:right; }
+    }
+  </style>
+</head>
+<body>
+  <noscript><div class="noscript">This 3D chess game needs JavaScript enabled.</div></noscript>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">♞</div>
+        <div><div class="brand-name">AETHER CHESS</div><div class="brand-sub">3D Strategy • Classic Chess</div></div>
+      </div>
+      <div class="top-actions">
+        <div class="pill"><span class="dot"></span><span id="connectionLabel">3D board ready</span></div>
+        <button class="icon-btn" id="settingsButton" aria-label="Open settings" aria-expanded="false" title="Settings"><span class="dots">···</span></button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="board-panel" aria-label="Chessboard">
+        <div class="board-head">
+          <div><div class="board-heading">The board</div><div class="board-caption">A clean, immersive chess table</div></div>
+          <div class="board-toolbar">
+            <button class="small-btn" id="undoButton" title="Undo last move">↶ <span>Undo</span></button>
+            <button class="small-btn" id="resetButton" title="Start a new game">＋ <span>New game</span></button>
+          </div>
+        </div>
+        <div class="board-wrap">
+          <canvas id="boardCanvas" aria-label="Interactive 3D chessboard. Click a piece, then a destination square."></canvas>
+          <div class="board-vignette"></div>
+        </div>
+        <div class="board-bottom">
+          <div class="legend"><span><i class="legend-dot" style="background:#e0bd7b"></i> Selected piece</span><span><i class="legend-dot" style="background:#82c9a1"></i> Legal move</span></div>
+          <div class="drag-note">Drag to orbit · Scroll to zoom</div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="card status-card">
+          <div class="card-title-row"><div class="card-title">Game status</div><div class="eyebrow" id="moveBadge">MOVE 01</div></div>
+          <div class="turn-top">
+            <div class="turn-piece" id="turnPiece">♙</div>
+            <div><div class="turn-name" id="turnName">White to move</div><div class="turn-mode" id="modeLabel">Playing vs computer</div></div>
+          </div>
+          <div class="status-line" id="statusLine"><span class="status-icon" id="statusIcon">✓</span><span id="statusText">Ready when you are.</span></div>
+          <div class="stats">
+            <div class="stat"><div class="stat-label">Moves played</div><div class="stat-value" id="movesPlayed">0</div></div>
+            <div class="stat"><div class="stat-label">Position</div><div class="stat-value gold" id="positionLabel">Start</div></div>
+          </div>
+        </section>
+
+        <section class="card moves-card">
+          <div class="card-title-row"><div class="card-title">Move history</div><div class="move-count" id="moveCount">0 plies</div></div>
+          <div class="move-list" id="moveList"><div class="empty-moves">Your moves will appear here as the game unfolds. Choose a piece on the board to begin.</div></div>
+          <div class="captured-wrap">
+            <div class="captured-title">Captured pieces</div>
+            <div class="captured-pieces" id="capturedPieces"><span style="color:#718198;font-size:11px;align-self:center">None yet</span></div>
+          </div>
+        </section>
+
+        <section class="card analysis-card">
+          <div class="card-title-row"><div class="card-title">AI game review</div><span class="eyebrow">CHATGPT</span></div>
+          <button class="analysis-btn" id="analyzeButton"><span class="analysis-icon">✧</span> Analyze with ChatGPT <span>↗</span></button>
+          <p class="analysis-note">Copies the current position, FEN and move history into an analysis prompt, then opens ChatGPT. Paste the prompt there to review ideas and mistakes.</p>
+        </section>
+      </aside>
+    </main>
+    <footer class="footer"><span><strong>AETHER CHESS</strong> · A timeless game, reimagined in 3D.</span><span>Local game · Your moves stay in this browser</span></footer>
+  </div>
+
+  <div class="menu-popover" id="settingsMenu" role="dialog" aria-label="Game settings">
+    <div class="menu-head"><strong>Game settings</strong><span>QUICK CONTROL</span></div>
+    <div class="menu-section-label">Game mode</div>
+    <button class="menu-item" id="computerMode"><span class="mi-icon">♟</span><span>Play vs computer<span class="mi-sub">You play White · Basic local engine</span></span><span class="check" id="computerCheck">✓</span></button>
+    <button class="menu-item" id="localMode"><span class="mi-icon">♙</span><span>Local two-player<span class="mi-sub">Take turns on the same device</span></span><span class="check" id="localCheck"></span></button>
+    <div class="menu-section-label">Appearance</div>
+    <label for="boardTheme" class="menu-item"><span class="mi-icon">◈</span><span>Board style</span></label>
+    <select id="boardTheme" class="menu-select" aria-label="Board style">
+      <option value="classic">Classic walnut</option>
+      <option value="emerald">Emerald & ivory</option>
+      <option value="slate">Midnight slate</option>
+    </select>
+    <button class="menu-item" id="flipButton"><span class="mi-icon">⟳</span><span>Flip board<span class="mi-sub">View from the other side</span></span></button>
+    <div class="menu-separator"></div>
+    <div class="menu-section-label">Preferences</div>
+    <button class="menu-item" id="hintsToggle"><span class="mi-icon">◎</span><span>Show legal moves<span class="mi-sub">Highlight available squares</span></span><span class="check" id="hintsCheck">✓</span></button>
+    <button class="menu-item" id="soundToggle"><span class="mi-icon">♫</span><span>Sound effects<span class="mi-sub">Soft move feedback</span></span><span class="check" id="soundCheck"></span></button>
+    <div class="menu-separator"></div>
+    <button class="menu-item" id="menuNewGame"><span class="mi-icon">＋</span><span>Start a new game<span class="mi-sub">Reset board and move history</span></span></button>
+  </div>
+
+  <div class="modal-backdrop" id="promotionModal" role="dialog" aria-modal="true" aria-labelledby="promotionTitle">
+    <div class="modal"><h2 id="promotionTitle">Choose promotion</h2><p>Your pawn has reached the final rank. Choose the piece you want to promote to.</p><div class="promotion-options">
+      <button data-promotion="q">♛<small>Queen</small></button><button data-promotion="r">♜<small>Rook</small></button><button data-promotion="b">♝<small>Bishop</small></button><button data-promotion="n">♞<small>Knight</small></button>
+    </div></div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.js"></script>
+  <script>
+  (() => {
+    'use strict';
+    if (!window.THREE || !window.Chess) {
+      document.body.innerHTML = '<main style="max-width:680px;margin:12vh auto;padding:28px;border:1px solid #354153;border-radius:18px;background:#18212d;color:#edf2f8;font:15px/1.7 system-ui,sans-serif"><h1 style="margin-top:0">Aether Chess could not load</h1><p>The game needs its 3D and chess-rule libraries from the internet. Check your connection, then refresh this page.</p></main>';
+      return;
+    }
+    const $ = id => document.getElementById(id);
+    const canvas = $('boardCanvas');
+    const toastEl = $('toast');
+    const game = new Chess();
+    const FILES = 'abcdefgh';
+    const GLYPHS = { w:{p:'♙',n:'♘',b:'♗',r:'♖',q:'♕',k:'♔'}, b:{p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'} };
+    const PIECE_NAMES = { p:'pawn', n:'knight', b:'bishop', r:'rook', q:'queen', k:'king' };
+    const MATERIAL = { p:100, n:320, b:330, r:500, q:900, k:20000 };
+    let scene, camera, renderer, controls, boardTiles = [], boardFrameGroup = null, pieceGroup, highlightGroup, selectedSquare = null, legalTargets = [], lastMoveSquares = [], flipped = false, mode = 'computer', showHints = true, soundOn = false, boardTheme = 'classic', aiThinking = false, toastTimer = null, pendingPromotion = null;
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let audioContext = null;
+
+    const THEMES = {
+      classic: { light:0xd5c5a6, dark:0x76563f, edge:0x392a20, accent:0xe0bd7b, floor:0x111923 },
+      emerald: { light:0xe4e2ce, dark:0x477b69, edge:0x243d37, accent:0xd7bd81, floor:0x111c20 },
+      slate: { light:0xb5bfca, dark:0x495a70, edge:0x222d3b, accent:0xaac3db, floor:0x101821 }
+    };
+
+    function init3D() {
+      if (!window.THREE || !window.Chess) {
+        $('connectionLabel').textContent = 'A library did not load';
+        showToast('The 3D chess libraries could not load. Check your internet connection and refresh.');
+        return;
+      }
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111923);
+      scene.fog = new THREE.Fog(0x111923, 16, 31);
+      camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+      camera.position.set(10.4, 12.5, 13.7);
+      renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true, powerPreference:'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.18;
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = .075;
+      controls.enablePan = false;
+      controls.minDistance = 9;
+      controls.maxDistance = 19;
+      controls.maxPolarAngle = Math.PI / 2.06;
+      controls.target.set(0, .1, 0);
+      controls.update();
+
+      scene.add(new THREE.HemisphereLight(0xdce7f6, 0x27212a, 1.05));
+      const key = new THREE.DirectionalLight(0xffe5bb, 2.7); key.position.set(-5, 12, 7); key.castShadow = true; key.shadow.mapSize.set(2048,2048); key.shadow.camera.left=-8;key.shadow.camera.right=8;key.shadow.camera.top=8;key.shadow.camera.bottom=-8;key.shadow.bias=-.0004;scene.add(key);
+      const rim = new THREE.DirectionalLight(0x8ab6e7, 1.35); rim.position.set(8,7,-7); scene.add(rim);
+      const soft = new THREE.PointLight(0xdaa76a, .7, 18); soft.position.set(0, 7, 0); scene.add(soft);
+
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({ color:THEMES[boardTheme].floor, roughness:.95, metalness:.05 }));
+      floor.rotation.x = -Math.PI/2; floor.position.y = -.42; floor.receiveShadow = true; scene.add(floor);
+      pieceGroup = new THREE.Group(); scene.add(pieceGroup);
+      highlightGroup = new THREE.Group(); scene.add(highlightGroup);
+      buildBoard(); renderPieces(); refreshHighlights(); resizeRenderer();
+      window.addEventListener('resize', resizeRenderer);
+      canvas.addEventListener('pointerdown', onBoardPointerDown);
+      renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+      animate();
+      $('connectionLabel').textContent = '3D board ready';
+    }
+
+    function material(color, roughness=.4, metalness=.1) { return new THREE.MeshStandardMaterial({ color, roughness, metalness }); }
+    function buildBoard() {
+      boardTiles.forEach(t => { scene.remove(t); if(t.geometry)t.geometry.dispose(); }); boardTiles = [];
+      if (boardFrameGroup) { scene.remove(boardFrameGroup); boardFrameGroup.traverse(o => { if(o.geometry)o.geometry.dispose(); if(o.material && o.material.dispose)o.material.dispose(); }); }
+      boardFrameGroup = new THREE.Group(); scene.add(boardFrameGroup);
+      const theme = THEMES[boardTheme];
+      const base = new THREE.Mesh(new THREE.BoxGeometry(8.38,.28,8.38), material(theme.edge,.36,.35));
+      base.position.set(0,-.04,0); base.castShadow = true; base.receiveShadow = true; boardFrameGroup.add(base);
+      const rimMat = material(theme.accent,.32,.45);
+      const edgeBars = [
+        {x:0,z:-4.17,w:8.45,d:.055},{x:0,z:4.17,w:8.45,d:.055},
+        {x:-4.17,z:0,w:.055,d:8.45},{x:4.17,z:0,w:.055,d:8.45}
+      ];
+      edgeBars.forEach(b => {const mesh = new THREE.Mesh(new THREE.BoxGeometry(b.w,.045,b.d),rimMat);mesh.position.set(b.x,-.185,b.z);boardFrameGroup.add(mesh);});
+      const lightMat = material(theme.light,.48,.06), darkMat = material(theme.dark,.48,.06);
+      for (let row=0; row<8; row++) for (let file=0; file<8; file++) {
+        const square = FILES[file] + (8-row);
+        const tile = new THREE.Mesh(new THREE.BoxGeometry(.985,.035,.985), ((file+row)%2===0) ? lightMat : darkMat);
+        tile.position.set(file-3.5,.12,row-3.5); tile.receiveShadow = true; tile.userData.square = square; tile.userData.file=file; tile.userData.row=row;
+        scene.add(tile); boardTiles.push(tile);
+      }
+      scene.background = new THREE.Color(theme.floor);
+      if (scene.fog) scene.fog.color.setHex(theme.floor);
+      const floorMaterial = scene.children.find(o => o.geometry && o.geometry.type === 'PlaneGeometry' && o.position.y < -.3);
+      if (floorMaterial) floorMaterial.material.color.setHex(theme.floor);
+    }
+
+    function lathe(points, mat, segments=28) {
+      const geometry = new THREE.LatheGeometry(points.map(p => new THREE.Vector2(p[0],p[1])), segments);
+      const mesh = new THREE.Mesh(geometry, mat); mesh.castShadow = true; mesh.receiveShadow = true; return mesh;
+    }
+    function ring(group, radius, y, thickness, mat) {
+      const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius,thickness,8,30),mat);
+      mesh.rotation.x = Math.PI/2; mesh.position.y=y; mesh.castShadow=true;group.add(mesh);return mesh;
+    }
+    function addSphere(group, radius, y, mat, x=0, z=0, sx=1, sy=1, sz=1) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius,20,14),mat);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;
+    }
+    function commonBase(group, main, trim) {
+      group.add(lathe([[0,.015],[.18,.015],[.24,.045],[.255,.075],[.22,.105],[.16,.13],[.125,.17],[.1,.19]],main));
+      ring(group,.229,.075,.012,trim);
+      ring(group,.145,.145,.009,trim);
+    }
+    function pieceMaterials(color) {
+      if (color === 'w') return { main:material(0xf0e5cc,.28,.15), trim:material(0xc69c5b,.28,.52), dark:material(0x766246,.48,.1), eye:material(0x252b33,.24,.15) };
+      return { main:material(0x273140,.29,.4), trim:material(0x91a5bb,.28,.53), dark:material(0x111923,.4,.28), eye:material(0xe0bd7b,.22,.25) };
+    }
+    function makePiece(type,color) {
+      const g = new THREE.Group(); const m=pieceMaterials(color); commonBase(g,m.main,m.trim);
+      if (type==='p') {
+        g.add(lathe([[.095,.16],[.12,.22],[.105,.29],[.075,.38],[.06,.45],[.075,.49]],m.main));
+        ring(g,.105,.245,.009,m.trim); addSphere(g,.115,.57,m.main,0,0,1,1.04,1);
+      } else if (type==='r') {
+        g.add(lathe([[.105,.15],[.14,.22],[.13,.3],[.145,.38],[.16,.53],[.18,.58]],m.main));
+        ring(g,.15,.40,.012,m.trim);
+        const top = new THREE.Mesh(new THREE.CylinderGeometry(.205,.19,.09,24),m.main);top.position.y=.61;top.castShadow=true;g.add(top);
+        for(let i=0;i<6;i++){const a=i*Math.PI/3;const block=new THREE.Mesh(new THREE.BoxGeometry(.09,.105,.09),m.main);block.position.set(Math.cos(a)*.15,.69,Math.sin(a)*.15);block.castShadow=true;g.add(block);}
+      } else if (type==='n') {
+        g.add(lathe([[.1,.15],[.145,.23],[.12,.29],[.105,.34]],m.main));
+        const shape = new THREE.Shape(); shape.moveTo(-.13,.20);shape.lineTo(.105,.19);shape.lineTo(.15,.38);shape.lineTo(.10,.48);shape.lineTo(.03,.59);shape.lineTo(-.015,.52);shape.lineTo(-.10,.48);shape.lineTo(-.15,.37);shape.closePath();
+        const geo = new THREE.ExtrudeGeometry(shape,{depth:.16,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.025,bevelThickness:.025});
+        const head = new THREE.Mesh(geo,m.main);head.position.set(0,.08,-.08);head.rotation.y=-.1;head.castShadow=true;g.add(head);
+        addSphere(g,.018,.50,m.eye,.075,-.17,1,1,1);
+      } else if (type==='b') {
+        g.add(lathe([[.09,.15],[.14,.22],[.12,.3],[.105,.39],[.07,.5],[.055,.58],[.085,.62]],m.main));
+        ring(g,.105,.39,.012,m.trim); addSphere(g,.075,.65,m.main);
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(.045,.12,16),m.trim);tip.position.y=.75;tip.castShadow=true;g.add(tip);
+        const slash = new THREE.Mesh(new THREE.BoxGeometry(.025,.22,.03),m.trim);slash.position.set(.008,.55,.088);slash.rotation.z=.35;g.add(slash);
+      } else if (type==='q') {
+        g.add(lathe([[.1,.15],[.15,.22],[.13,.32],[.105,.43],[.085,.54],[.11,.61],[.15,.65]],m.main));
+        ring(g,.13,.32,.012,m.trim);ring(g,.13,.61,.012,m.trim);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(.155,.12,.07,24),m.trim);crown.position.y=.67;crown.castShadow=true;g.add(crown);
+        for(let i=0;i<5;i++){const a=i*Math.PI*2/5;addSphere(g,.042,.76,m.trim,Math.cos(a)*.12,Math.sin(a)*.12);}
+        addSphere(g,.065,.73,m.main,0,0,1,.75,1);
+      } else if (type==='k') {
+        g.add(lathe([[.1,.15],[.15,.23],[.13,.33],[.11,.45],[.09,.57],[.13,.63],[.15,.67]],m.main));
+        ring(g,.13,.37,.013,m.trim);ring(g,.13,.64,.012,m.trim);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(.15,.12,.07,24),m.trim);crown.position.y=.69;crown.castShadow=true;g.add(crown);
+        const shaft = new THREE.Mesh(new THREE.BoxGeometry(.045,.22,.045),m.trim);shaft.position.y=.83;shaft.castShadow=true;g.add(shaft);
+        const cross = new THREE.Mesh(new THREE.BoxGeometry(.15,.045,.045),m.trim);cross.position.y=.84;cross.castShadow=true;g.add(cross);
+      }
+      g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+      g.userData = { type, color };
+      return g;
+    }
+    function squarePosition(square) {
+      const file=FILES.indexOf(square[0]), rank=Number(square[1]);
+      return { x:file-3.5, z:(8-rank)-3.5 };
+    }
+    function clearGroup(group) { while(group.children.length){const obj=group.children.pop();if(obj.geometry)obj.geometry.dispose();} }
+    function renderPieces() {
+      if (!pieceGroup) return;
+      while(pieceGroup.children.length){const obj=pieceGroup.children[0];pieceGroup.remove(obj);obj.traverse(child=>{if(child.geometry)child.geometry.dispose();if(child.material){if(Array.isArray(child.material))child.material.forEach(m=>m.dispose());else child.material.dispose();}});}
+      const board=game.board();
+      for(let r=0;r<8;r++) for(let f=0;f<8;f++) {
+        const p=board[r][f];if(!p)continue;
+        const square=FILES[f]+(8-r), pos=squarePosition(square), model=makePiece(p.type,p.color);
+        model.position.set(pos.x,.14,pos.z);model.userData.square=square;pieceGroup.add(model);
+      }
+    }
+    function addHighlight(square,color,opacity,scale=1) {
+      const pos=squarePosition(square);
+      const mesh=new THREE.Mesh(new THREE.PlaneGeometry(.88*scale,.88*scale),new THREE.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false,side:THREE.DoubleSide}));
+      mesh.rotation.x=-Math.PI/2;mesh.position.set(pos.x,.164,pos.z);highlightGroup.add(mesh);
+    }
+    function refreshHighlights() {
+      if(!highlightGroup)return;
+      while(highlightGroup.children.length){const obj=highlightGroup.children[0];highlightGroup.remove(obj);if(obj.geometry)obj.geometry.dispose();if(obj.material)obj.material.dispose();}
+      lastMoveSquares.forEach(s=>addHighlight(s,0xd5b06c,.20));
+      if(selectedSquare){addHighlight(selectedSquare,0xf0c66e,.48);if(showHints)legalTargets.forEach(m=>{
+        const pos=squarePosition(m.to);const target=game.get(m.to);
+        if(target){const ringMesh=new THREE.Mesh(new THREE.RingGeometry(.22,.31,24),new THREE.MeshBasicMaterial({color:0x8bd1a5,transparent:true,opacity:.93,side:THREE.DoubleSide,depthWrite:false}));ringMesh.rotation.x=-Math.PI/2;ringMesh.position.set(pos.x,.174,pos.z);highlightGroup.add(ringMesh);}
+        else {const dot=new THREE.Mesh(new THREE.CircleGeometry(.105,20),new THREE.MeshBasicMaterial({color:0x8bd1a5,transparent:true,opacity:.82,depthWrite:false,side:THREE.DoubleSide}));dot.rotation.x=-Math.PI/2;dot.position.set(pos.x,.17,pos.z);highlightGroup.add(dot);}
+      });}
+      const kingSquare=findKingSquare(game.turn());
+      if(game.in_check() && kingSquare) addHighlight(kingSquare,0xe76868,.48);
+    }
+    function findKingSquare(color) {
+      const b=game.board();for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=b[r][f];if(p&&p.type==='k'&&p.color===color)return FILES[f]+(8-r);}return null;
+    }
+    function animate() { requestAnimationFrame(animate);if(controls)controls.update();if(renderer&&scene&&camera)renderer.render(scene,camera); }
+    function resizeRenderer() {
+      if(!renderer||!camera)return;const w=canvas.clientWidth||500,h=canvas.clientHeight||500;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+    }
+    function onBoardPointerDown(event) {
+      if(!renderer||aiThinking||game.game_over())return;
+      if(mode==='computer'&&game.turn()==='b')return;
+      const rect=canvas.getBoundingClientRect();pointer.x=((event.clientX-rect.left)/rect.width)*2-1;pointer.y=-((event.clientY-rect.top)/rect.height)*2+1;
+      raycaster.setFromCamera(pointer,camera);
+      const hits=raycaster.intersectObjects(boardTiles,false);if(!hits.length)return;
+      const square=hits[0].object.userData.square;handleSquareClick(square);
+    }
+    function handleSquareClick(square) {
+      const piece=game.get(square);
+      if(selectedSquare) {
+        const possible=legalTargets.find(m=>m.to===square);
+        if(possible) {
+          if(possible.flags && possible.flags.includes('p')) { pendingPromotion={from:selectedSquare,to:square};$('promotionModal').classList.add('open');return; }
+          commitMove(selectedSquare,square);return;
+        }
+      }
+      if(piece&&piece.color===game.turn()) {
+        selectedSquare=square;legalTargets=game.moves({square,verbose:true});refreshHighlights();
+      } else { selectedSquare=null;legalTargets=[];refreshHighlights(); }
+    }
+    function commitMove(from,to,promotion='q') {
+      let move;
+      try { move=game.move({from,to,promotion}); } catch(e) { move=null; }
+      if(!move){showToast('That move is not legal. Choose a highlighted square.');return;}
+      lastMoveSquares=[move.from,move.to];selectedSquare=null;legalTargets=[];pendingPromotion=null;$('promotionModal').classList.remove('open');
+      renderPieces();refreshHighlights();updateUI();playMoveSound(move);
+      if(game.game_over()) { showToast(resultMessage());return; }
+      if(mode==='computer'&&game.turn()==='b') { aiThinking=true;$('connectionLabel').textContent='Computer thinking';$('statusText').textContent='The computer is considering its move…';$('statusLine').classList.add('warning');setTimeout(makeComputerMove,450); }
+    }
+    function makeComputerMove() {
+      if(game.game_over()||mode!=='computer'){aiThinking=false;updateUI();return;}
+      const best=chooseBestMove(2);
+      aiThinking=false;
+      if(best) { const move=game.move(best);lastMoveSquares=[move.from,move.to];selectedSquare=null;legalTargets=[];renderPieces();refreshHighlights();updateUI();playMoveSound(move); }
+      if(game.game_over())showToast(resultMessage());
+      $('connectionLabel').textContent='3D board ready';
+    }
+    function evaluatePosition() {
+      if(game.in_checkmate())return game.turn()==='w'?-100000:100000;
+      if(game.in_draw())return 0;
+      let score=0;const b=game.board();
+      for(let r=0;r<8;r++)for(let f=0;f<8;f++){
+        const p=b[r][f];if(!p)continue;const sign=p.color==='w'?1:-1;score+=sign*MATERIAL[p.type];
+        const center=3.5-(Math.abs(3.5-f)+Math.abs(3.5-r))/2;
+        if(p.type==='n'||p.type==='b')score+=sign*center*8;
+        if(p.type==='p')score+=sign*(p.color==='w'?(6-r):(r-1))*5;
+      }
+      if(game.in_check())score+=game.turn()==='w'?-18:18;
+      return score;
+    }
+    function minimax(depth,alpha,beta,ply) {
+      if(depth===0||game.game_over())return evaluatePosition()+(game.in_checkmate()?(game.turn()==='w'?ply:-ply):0);
+      const moves=game.moves({verbose:true});
+      moves.sort((a,b)=>((b.captured?MATERIAL[b.captured]:0)-(a.captured?MATERIAL[a.captured]:0)));
+      const maximize=game.turn()==='w';let best=maximize?-Infinity:Infinity;
+      for(const m of moves){game.move(m);const val=minimax(depth-1,alpha,beta,ply+1);game.undo();
+        if(maximize){best=Math.max(best,val);alpha=Math.max(alpha,best);}else{best=Math.min(best,val);beta=Math.min(beta,best);}if(beta<=alpha)break;
+      }
+      return best;
+    }
+    function chooseBestMove(depth) {
+      const moves=game.moves({verbose:true});if(!moves.length)return null;
+      let best=null,bestScore=Infinity,alpha=-Infinity,beta=Infinity;
+      // The computer plays Black, so it minimizes the White-positive evaluation.
+      moves.sort((a,b)=>((b.captured?MATERIAL[b.captured]:0)-(a.captured?MATERIAL[a.captured]:0)));
+      for(const m of moves){game.move(m);const score=minimax(depth-1,alpha,beta,1);game.undo();if(score<bestScore){bestScore=score;best=m;}beta=Math.min(beta,bestScore);}
+      return best ? {from:best.from,to:best.to,promotion:best.promotion||'q'} : null;
+    }
+    function moveListData() { return game.history({verbose:true}); }
+    function updateUI() {
+      const history=moveListData(),turn=game.turn(),check=game.in_check(),over=game.game_over();
+      $('turnName').textContent=over?'Game finished':(turn==='w'?'White to move':'Black to move');
+      $('turnPiece').textContent=GLYPHS[turn].p;$('turnPiece').classList.toggle('black',turn==='b');
+      $('modeLabel').textContent=mode==='computer'?'Playing vs computer':'Local two-player';
+      $('moveBadge').textContent='MOVE '+String(Math.floor(history.length/2)+1).padStart(2,'0');
+      $('movesPlayed').textContent=Math.floor(history.length/2)+(history.length%2?'½':'');
+      $('moveCount').textContent=history.length+' plies';
+      $('positionLabel').textContent=history.length?history[history.length-1].to.toUpperCase():'Start';
+      const line=$('statusLine');line.classList.toggle('warning',check||over||aiThinking);
+      $('statusIcon').textContent=over?'!':check?'!':aiThinking?'…':'✓';
+      if(aiThinking) $('statusText').textContent='The computer is considering its move…';
+      else if(game.in_checkmate()) $('statusText').textContent=(turn==='w'?'White':'Black')+' is checkmated.';
+      else if(game.in_stalemate()) $('statusText').textContent='Stalemate — the game is a draw.';
+      else if(game.in_threefold_repetition()) $('statusText').textContent='Threefold repetition — draw.';
+      else if(game.insufficient_material()) $('statusText').textContent='Insufficient material — draw.';
+      else if(game.in_draw()) $('statusText').textContent='Draw position.';
+      else if(check) $('statusText').textContent=(turn==='w'?'White':'Black')+' is in check.';
+      else $('statusText').textContent=turn==='w'?'White can make a move.':'Black can make a move.';
+      renderMoveList(history);renderCaptured(history);
+    }
+    function renderMoveList(history) {
+      const el=$('moveList');if(!history.length){el.innerHTML='<div class="empty-moves">Your moves will appear here as the game unfolds. Choose a piece on the board to begin.</div>';return;}
+      const pairs=[];for(let i=0;i<history.length;i+=2)pairs.push({n:Math.floor(i/2)+1,w:history[i],b:history[i+1]});
+      el.innerHTML=pairs.map((p,i)=>`<div class="move-row"><span class="move-number">${String(p.n).padStart(2,'0')}.</span><span class="move-san ${i===pairs.length-1?'last':''}">${escapeHTML(p.w.san)}</span><span class="move-san ${p.b&&i===pairs.length-1?'last':''}">${p.b?escapeHTML(p.b.san):''}</span></div>`).join('');
+      el.scrollTop=el.scrollHeight;
+    }
+    function renderCaptured(history) {
+      const counts={w:[],b:[]};history.forEach(m=>{if(m.captured){const capturedColor=m.color==='w'?'b':'w';counts[capturedColor].push(m.captured);}});
+      const items=[];['w','b'].forEach(c=>counts[c].forEach(p=>items.push({c,p})));
+      // Show the captured pieces grouped by the side that lost them.
+      const html=items.map(({c,p})=>`<span class="taken ${c==='w'?'light':'dark'}" title="${c==='w'?'White':'Black'} ${PIECE_NAMES[p]||p}">${GLYPHS[c][p]}</span>`).join('');
+      $('capturedPieces').innerHTML=html||'<span style="color:#718198;font-size:11px;align-self:center">None yet</span>';
+    }
+    function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function resultMessage() {
+      if(game.in_checkmate())return 'Checkmate! '+(game.turn()==='w'?'Black':'White')+' wins.';
+      if(game.in_stalemate())return 'Stalemate — it is a draw.';
+      if(game.in_threefold_repetition())return 'Draw by threefold repetition.';
+      if(game.insufficient_material())return 'Draw by insufficient material.';
+      if(game.in_draw())return 'The game ended in a draw.';
+      return 'Game over.';
+    }
+    function newGame(quiet=false) {
+      game.reset();selectedSquare=null;legalTargets=[];lastMoveSquares=[];pendingPromotion=null;aiThinking=false;$('promotionModal').classList.remove('open');
+      renderPieces();refreshHighlights();updateUI();$('connectionLabel').textContent='3D board ready';closeMenu();
+      if(!quiet)showToast('New game started. White to move.');
+    }
+    function undoMove() {
+      if(aiThinking){showToast('Wait for the computer to finish its move.');return;}
+      if(!game.history().length){showToast('There are no moves to undo yet.');return;}
+      game.undo();if(mode==='computer'&&game.turn()==='b'&&game.history().length)game.undo();
+      const hist=game.history({verbose:true});lastMoveSquares=hist.length?[hist[hist.length-1].from,hist[hist.length-1].to]:[];selectedSquare=null;legalTargets=[];renderPieces();refreshHighlights();updateUI();showToast('Last move undone.');
+    }
+    function setMode(next) {
+      mode=next;$('computerCheck').textContent=mode==='computer'?'✓':'';$('localCheck').textContent=mode==='local'?'✓':'';newGame(true);$('modeLabel').textContent=mode==='computer'?'Playing vs computer':'Local two-player';showToast(mode==='computer'?'You are White. The computer plays Black.':'Local two-player mode enabled.');
+    }
+    function showToast(message) { toastEl.textContent=message;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),3400); }
+    function closeMenu() { $('settingsMenu').classList.remove('open');$('settingsButton').setAttribute('aria-expanded','false'); }
+    function toggleMenu() {const open=$('settingsMenu').classList.toggle('open');$('settingsButton').setAttribute('aria-expanded',String(open));}
+    function playMoveSound(move) {
+      if(!soundOn)return;
+      try {audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();const osc=audioContext.createOscillator(),gain=audioContext.createGain();osc.type='sine';osc.frequency.value=move.captured?240:420;gain.gain.setValueAtTime(.0001,audioContext.currentTime);gain.gain.exponentialRampToValueAtTime(.055,audioContext.currentTime+.012);gain.gain.exponentialRampToValueAtTime(.0001,audioContext.currentTime+.11);osc.connect(gain);gain.connect(audioContext.destination);osc.start();osc.stop(audioContext.currentTime+.12);}catch(e){}
+    }
+    async function analyzeWithChatGPT() {
+      const history=game.pgn()||'(No moves have been played yet.)';
+      const prompt=`Act as a careful chess coach and analyze my current chess game. Explain your analysis in clear, practical language.\n\nPlease provide: (1) a short evaluation of the current position, (2) the best candidate move for the side to move and why, (3) the main threat for each side, (4) tactical ideas or blunders to watch for, and (5) one simple lesson I can learn. Do not invent engine certainty; explain when a line is only a candidate.\n\nSide to move: ${game.turn()==='w'?'White':'Black'}\nCurrent FEN: ${game.fen()}\nMove history (PGN):\n${history}\n\nPlease analyze the position represented by the FEN as well as the game history.`;
+      // Open synchronously from the click so popup blockers are less likely to interfere.
+      const chatTab=window.open('https://chatgpt.com/','_blank');
+      if (chatTab) { try { chatTab.opener = null; } catch (e) {} }
+      let copied=false;
+      try {if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(prompt);copied=true;}}catch(e){}
+      if(!copied){
+        const area=document.createElement('textarea');area.value=prompt;area.setAttribute('readonly','');area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();
+        try{copied=document.execCommand('copy');}catch(e){}area.remove();
+      }
+      if(copied)showToast(chatTab?'Analysis prompt copied. Paste it into the ChatGPT tab.':'Prompt copied. Open ChatGPT and paste it into a chat.');
+      else showToast('Could not copy automatically. Your game data is ready in the browser; allow clipboard access and try again.');
+    }
+
+    $('settingsButton').addEventListener('click',e=>{e.stopPropagation();toggleMenu();});
+    $('computerMode').addEventListener('click',()=>setMode('computer'));
+    $('localMode').addEventListener('click',()=>setMode('local'));
+    $('flipButton').addEventListener('click',()=>{flipped=!flipped;const distance= Math.sqrt(camera.position.x**2+camera.position.z**2);const sign=flipped?-1:1;camera.position.set(sign*distance*.605,camera.position.y,sign*distance*.796);controls.update();showToast(flipped?'Board view flipped.':'Board view restored.');closeMenu();});
+    $('boardTheme').addEventListener('change',e=>{boardTheme=e.target.value;buildBoard();renderPieces();refreshHighlights();closeMenu();showToast('Board style updated.');});
+    $('hintsToggle').addEventListener('click',()=>{showHints=!showHints;$('hintsCheck').textContent=showHints?'✓':'';refreshHighlights();});
+    $('soundToggle').addEventListener('click',()=>{soundOn=!soundOn;$('soundCheck').textContent=soundOn?'✓':'';showToast(soundOn?'Move sounds enabled.':'Move sounds muted.');});
+    $('menuNewGame').addEventListener('click',()=>newGame());
+    $('resetButton').addEventListener('click',()=>newGame());
+    $('undoButton').addEventListener('click',undoMove);
+    $('analyzeButton').addEventListener('click',analyzeWithChatGPT);
+    document.querySelectorAll('[data-promotion]').forEach(btn=>btn.addEventListener('click',()=>{if(!pendingPromotion)return;const p=btn.getAttribute('data-promotion');const move=game.move({from:pendingPromotion.from,to:pendingPromotion.to,promotion:p});if(move){lastMoveSquares=[move.from,move.to];selectedSquare=null;legalTargets=[];pendingPromotion=null;$('promotionModal').classList.remove('open');renderPieces();refreshHighlights();updateUI();playMoveSound(move);if(game.game_over())showToast(resultMessage());else if(mode==='computer'&&game.turn()==='b'){aiThinking=true;updateUI();$('connectionLabel').textContent='Computer thinking';setTimeout(makeComputerMove,450);}}}));
+    document.addEventListener('pointerdown',e=>{if(!$('settingsMenu').contains(e.target)&&!$('settingsButton').contains(e.target))closeMenu();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeMenu();$('promotionModal').classList.remove('open');pendingPromotion=null;}});
+    init3D();updateUI();
+  })();
+  </script>
+</body>
+</html>
