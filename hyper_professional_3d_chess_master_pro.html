@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Chess Master Pro</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0b0f19',
+                        panelBg: 'rgba(18, 24, 38, 0.85)',
+                        accentGlow: '#6366f1',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Chess.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <!-- Marked.js for Gemini Markdown Rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Tone.js for Web Audio SFX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0b0f19;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #f3f4f6;
+            user-select: none;
+        }
+        #webgl-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-button {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            transition: all 0.2s ease;
+        }
+        .glass-button:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(99, 102, 241, 0.5);
+            transform: translateY(-1px);
+        }
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.4);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.8);
+        }
+        /* Smooth Drawer Slide */
+        .drawer-slide {
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        /* Pulsing Glow Animation */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
+        }
+        .check-alert {
+            animation: pulse-glow 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden">
+
+    <!-- WebGL Canvas Container -->
+    <div id="webgl-container"></div>
+
+    <!-- Main Header Bar -->
+    <header class="absolute top-0 left-0 right-0 z-10 p-3 sm:p-4 flex items-center justify-between pointer-events-none">
+        <!-- Logo & Title -->
+        <div class="glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto shadow-2xl">
+            <div class="w-9 h-9 rounded-xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-400 text-lg shadow-inner">
+                <i class="fa-solid fa-chess-king"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold tracking-wider uppercase bg-gradient-to-r from-white via-slate-200 to-indigo-300 bg-clip-text text-transparent">
+                    3D Chess Master Pro
+                </h1>
+                <p id="game-substatus" class="text-[10px] text-slate-400 font-medium">Standard Match</p>
+            </div>
+        </div>
+
+        <!-- Center Turn & Status Display -->
+        <div class="glass-panel px-5 py-2 rounded-2xl flex items-center gap-4 pointer-events-auto shadow-2xl hidden md:flex">
+            <div class="flex items-center gap-2">
+                <span id="turn-indicator" class="w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-700 shadow-md"></span>
+                <span id="turn-text" class="text-xs font-semibold tracking-wide text-slate-200">White's Turn</span>
+            </div>
+            <div id="check-badge" class="hidden px-2.5 py-0.5 rounded-full bg-red-500/20 border border-red-500/50 text-red-400 text-[11px] font-bold tracking-wider uppercase check-alert">
+                CHECK!
+            </div>
+            <div class="h-4 w-[1px] bg-slate-700"></div>
+            <div class="flex items-center gap-2 text-xs font-mono text-indigo-300">
+                <i class="fa-regular fa-clock"></i>
+                <span id="game-timer">00:00</span>
+            </div>
+        </div>
+
+        <!-- Action Bar & Three-Dots (⋮) Settings Trigger -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <!-- Quick Camera Reset -->
+            <button id="btn-quick-cam" title="Flip / Reset Camera" class="glass-button w-11 h-11 rounded-2xl flex items-center justify-center text-slate-300 hover:text-indigo-400 text-sm shadow-lg">
+                <i class="fa-solid fa-camera-rotate"></i>
+            </button>
+            <!-- Undo Move -->
+            <button id="btn-quick-undo" title="Undo Move" class="glass-button w-11 h-11 rounded-2xl flex items-center justify-center text-slate-300 hover:text-indigo-400 text-sm shadow-lg">
+                <i class="fa-solid fa-rotate-left"></i>
+            </button>
+
+            <!-- Prominent Three Dots Settings Button -->
+            <button id="btn-toggle-settings" title="Settings & Dashboard" class="glass-button w-11 h-11 rounded-2xl flex items-center justify-center text-indigo-400 border-indigo-500/40 hover:bg-indigo-600/20 text-lg shadow-xl relative group">
+                <i class="fa-solid fa-ellipsis-vertical transition-transform group-hover:scale-110"></i>
+                <span class="absolute -bottom-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full border-2 border-slate-900"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Captured Pieces Sidebar (Left Side Floating) -->
+    <div class="absolute left-4 top-24 z-10 pointer-events-none hidden lg:block">
+        <div class="glass-panel p-3 rounded-2xl pointer-events-auto w-16 flex flex-col gap-4 text-center">
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wider font-bold mb-1">Taken</div>
+                <div id="captured-black" class="flex flex-col gap-1 text-slate-300 text-sm min-h-[40px]"></div>
+            </div>
+            <div class="h-[1px] bg-slate-700/50"></div>
+            <div>
+                <div id="captured-white" class="flex flex-col gap-1 text-slate-400 text-sm min-h-[40px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Turn/Status Bar (Only visible on small screens) -->
+    <div class="absolute top-20 left-1/2 -translate-x-1/2 z-10 md:hidden pointer-events-auto">
+        <div class="glass-panel px-4 py-1.5 rounded-full flex items-center gap-3 shadow-xl">
+            <div class="flex items-center gap-2">
+                <span id="turn-indicator-mobile" class="w-3 h-3 rounded-full bg-white border border-slate-700"></span>
+                <span id="turn-text-mobile" class="text-xs font-semibold text-slate-200">White</span>
+            </div>
+            <div id="check-badge-mobile" class="hidden text-[10px] text-red-400 font-bold uppercase">CHECK</div>
+        </div>
+    </div>
+
+    <!-- THREE DOTS (⋮) SLIDE-OUT SETTINGS DRAWER -->
+    <div id="drawer-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+    
+    <aside id="settings-drawer" class="fixed top-0 right-0 bottom-0 w-full sm:w-[480px] z-50 glass-panel border-l border-white/10 shadow-2xl flex flex-col drawer-slide translate-x-full">
+        <!-- Drawer Header -->
+        <div class="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-400 text-sm">
+                    <i class="fa-solid fa-sliders"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-white tracking-wide">Control Center</h2>
+                    <p class="text-xs text-slate-400">Game Engine & Application Settings</p>
+                </div>
+            </div>
+            <button id="btn-close-drawer" class="w-9 h-9 rounded-xl glass-button flex items-center justify-center text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Navigation Tabs (3-Line Settings Layout) -->
+        <div class="flex border-b border-slate-800/80 bg-slate-950/40 p-1.5 gap-1 overflow-x-auto text-xs font-medium">
+            <button data-tab="tab-game" class="tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-indigo-400 bg-indigo-600/20 border border-indigo-500/30 whitespace-nowrap">
+                <i class="fa-solid fa-gamepad"></i> Game
+            </button>
+            <button data-tab="tab-visuals" class="tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 whitespace-nowrap">
+                <i class="fa-solid fa-palette"></i> Themes
+            </button>
+            <button data-tab="tab-audio" class="tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 whitespace-nowrap">
+                <i class="fa-solid fa-volume-high"></i> Audio
+            </button>
+            <button data-tab="tab-gemini" class="tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 whitespace-nowrap">
+                <i class="fa-solid fa-brain"></i> AI Analysis
+            </button>
+            <button data-tab="tab-logs" class="tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 whitespace-nowrap">
+                <i class="fa-solid fa-list-ol"></i> History
+            </button>
+        </div>
+
+        <!-- Drawer Content Body -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6">
+
+            <!-- TAB 1: GAME MODES & AI -->
+            <div id="tab-game" class="tab-content space-y-5">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Opponent / Mode</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="mode-pvp" class="glass-button p-3 rounded-xl text-left border-indigo-500/50 bg-indigo-600/10">
+                            <div class="text-sm font-bold text-white flex items-center justify-between">
+                                Pass & Play <i class="fa-solid fa-user-group text-indigo-400"></i>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-1">2 Players local</div>
+                        </button>
+                        <button id="mode-ai" class="glass-button p-3 rounded-xl text-left">
+                            <div class="text-sm font-bold text-white flex items-center justify-between">
+                                Vs AI Engine <i class="fa-solid fa-robot text-indigo-400"></i>
+                            </div>
+                            <div class="text-[11px] text-slate-400 mt-1">Challenge Computer</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI Settings (Hidden by default) -->
+                <div id="ai-settings-group" class="hidden space-y-4 p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">AI Difficulty</label>
+                        <select id="select-ai-level" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:border-indigo-500 outline-none">
+                            <option value="1">Beginner (Level 1)</option>
+                            <option value="2" selected>Intermediate (Level 2)</option>
+                            <option value="3">Grandmaster (Level 3)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Your Side</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button id="btn-side-white" class="glass-button p-2.5 rounded-xl text-xs font-bold text-center border-indigo-500/50 bg-indigo-600/20 text-white">
+                                White (First)
+                            </button>
+                            <button id="btn-side-black" class="glass-button p-2.5 rounded-xl text-xs font-bold text-center text-slate-400">
+                                Black (Second)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Game Actions</label>
+                    <div class="flex gap-3">
+                        <button id="btn-reset-game" class="flex-1 glass-button py-3 rounded-xl text-xs font-bold text-red-400 border-red-500/30 hover:bg-red-500/10 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> Reset Board
+                        </button>
+                        <button id="btn-flip-view" class="flex-1 glass-button py-3 rounded-xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-arrows-rotate"></i> Flip View
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: VISUALS & THEMES -->
+            <div id="tab-visuals" class="tab-content hidden space-y-5">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Board Theme</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button data-theme="classic" class="theme-btn glass-button p-3 rounded-xl text-left border-indigo-500/50 bg-indigo-600/10">
+                            <div class="text-xs font-bold text-white">Classic Wood</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Mahogany & Oak</div>
+                        </button>
+                        <button data-theme="cyberpunk" class="theme-btn glass-button p-3 rounded-xl text-left">
+                            <div class="text-xs font-bold text-cyan-400">Neon Cyberpunk</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Glowing Grid</div>
+                        </button>
+                        <button data-theme="marble" class="theme-btn glass-button p-3 rounded-xl text-left">
+                            <div class="text-xs font-bold text-slate-200">Luxury Marble</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Carrara & Obsidian</div>
+                        </button>
+                        <button data-theme="glass" class="theme-btn glass-button p-3 rounded-xl text-left">
+                            <div class="text-xs font-bold text-indigo-300">Minimal Glass</div>
+                            <div class="text-[10px] text-slate-400 mt-1">Translucent Frosted</div>
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Camera Angle Presets</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="cam-preset-p1" class="glass-button py-2 rounded-xl text-xs font-medium text-slate-300">Perspective</button>
+                        <button id="cam-preset-top" class="glass-button py-2 rounded-xl text-xs font-medium text-slate-300">Top Down (2D)</button>
+                        <button id="cam-preset-side" class="glass-button py-2 rounded-xl text-xs font-medium text-slate-300">Cinematic</button>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-slate-300">Dynamic Shadows</span>
+                        <input id="toggle-shadows" type="checkbox" checked class="w-4 h-4 accent-indigo-600 cursor-pointer">
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-slate-300">Move Markers & Glow</span>
+                        <input id="toggle-highlights" type="checkbox" checked class="w-4 h-4 accent-indigo-600 cursor-pointer">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: AUDIO & SFX -->
+            <div id="tab-audio" class="tab-content hidden space-y-5">
+                <div class="p-4 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-bold text-white">Sound Effects (SFX)</div>
+                            <div class="text-xs text-slate-400">Audio feedback for moves & captures</div>
+                        </div>
+                        <input id="toggle-sfx" type="checkbox" checked class="w-5 h-5 accent-indigo-600 cursor-pointer">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-2">Master Volume</label>
+                        <input id="slider-volume" type="range" min="0" max="100" value="80" class="w-full accent-indigo-500 cursor-pointer">
+                    </div>
+                </div>
+
+                <button id="btn-test-sound" class="w-full glass-button py-3 rounded-xl text-xs font-bold text-indigo-300 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-volume-low"></i> Test Audio Effects
+                </button>
+            </div>
+
+            <!-- TAB 4: GEMINI AI GAME ANALYSIS -->
+            <div id="tab-gemini" class="tab-content hidden space-y-5">
+                <div class="p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30 space-y-3">
+                    <div class="flex items-center gap-2 text-indigo-400 text-sm font-bold">
+                        <i class="fa-solid fa-sparkles"></i> Gemini Grandmaster Analyst
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">
+                        Get real-time AI tactical evaluation, position diagnostics, blunder alerts, and custom winning strategy guides based on current board position.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">API Key Settings</label>
+                    <input id="input-gemini-key" type="password" placeholder="Enter Gemini API Key (optional)" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:border-indigo-500 outline-none">
+                    <p class="text-[10px] text-slate-500 mt-1">Leaves blank to use auto-injected system environment API key.</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Analysis Focus</label>
+                    <select id="select-analysis-type" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:border-indigo-500 outline-none">
+                        <option value="positional">Comprehensive Positional Diagnostic</option>
+                        <option value="tactical">Best Move & Tactical Candidate Search</option>
+                        <option value="endgame">Endgame & Strategic Win Plan</option>
+                    </select>
+                </div>
+
+                <button id="btn-run-analysis" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs tracking-wider uppercase shadow-lg flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-brain"></i> Analyze Board Position
+                </button>
+            </div>
+
+            <!-- TAB 5: GAME LOGS & PGN -->
+            <div id="tab-logs" class="tab-content hidden space-y-5">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Move Notation History</label>
+                    <div id="move-history-container" class="h-44 bg-slate-950 rounded-xl p-3 border border-slate-800 overflow-y-auto text-xs font-mono text-slate-300 grid grid-cols-2 gap-x-4 gap-y-1">
+                        <div class="col-span-2 text-slate-500 italic text-center py-4">No moves played yet.</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">FEN Position</label>
+                    <div class="flex gap-2">
+                        <input id="input-fen" type="text" readonly class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-[11px] font-mono text-indigo-300 outline-none">
+                        <button id="btn-copy-fen" class="glass-button px-3 rounded-xl text-xs font-bold text-slate-300">Copy</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Export PGN</label>
+                    <button id="btn-copy-pgn" class="w-full glass-button py-2.5 rounded-xl text-xs font-bold text-slate-300 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-copy"></i> Copy PGN Notation
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </aside>
+
+    <!-- GEMINI ANALYSIS REPORT OVERLAY MODAL -->
+    <div id="gemini-modal-backdrop" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center justify-center p-4 sm:p-6">
+        <div class="glass-panel w-full max-w-2xl max-h-[85vh] rounded-3xl border border-indigo-500/30 shadow-2xl flex flex-col overflow-hidden">
+            <!-- Modal Header -->
+            <div class="p-5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-400">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Gemini Grandmaster Evaluation</h3>
+                        <p class="text-xs text-indigo-300">AI Position Diagnostics & Strategic Analysis</p>
+                    </div>
+                </div>
+                <button id="btn-close-gemini-modal" class="w-8 h-8 rounded-lg glass-button flex items-center justify-center text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Modal Content Body -->
+            <div id="gemini-report-body" class="flex-1 overflow-y-auto p-6 text-sm text-slate-200 leading-relaxed space-y-4">
+                <!-- Dynamic Content or Loader -->
+                <div class="flex flex-col items-center justify-center py-12 gap-3 text-indigo-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-3xl"></i>
+                    <span class="text-xs font-semibold text-slate-400">Analyzing chessboard position...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        /* =========================================================================
+           STATE MANAGEMENT & CONSTANTS
+           ========================================================================= */
+        const game = new Chess();
+        let scene, camera, renderer, controls;
+        let piecesGroup, boardGroup, highlightGroup;
+        let selectedSquare = null;
+        let validMoveSquares = [];
+        let squareMeshes = {}; // e.g. "e4": Mesh
+        let pieceMeshes = {};  // e.g. "e4": Mesh
+        let isAiMode = false;
+        let aiDifficulty = 2;
+        let playerColor = 'w';
+        let isAiThinking = false;
+        let shadowEnabled = true;
+        let soundEnabled = true;
+        let moveTimerInterval = null;
+        let secondsElapsed = 0;
+
+        // Visual Themes
+        const THEMES = {
+            classic: {
+                lightSquare: 0xf0d9b5, darkSquare: 0xb58863,
+                whitePiece: 0xf8fafc, blackPiece: 0x1e293b,
+                boardBorder: 0x3e2723, bg: 0x0b0f19
+            },
+            cyberpunk: {
+                lightSquare: 0x1e1b4b, darkSquare: 0x311b92,
+                whitePiece: 0x06b6d4, blackPiece: 0xf43f5e,
+                boardBorder: 0x0f172a, bg: 0x030712
+            },
+            marble: {
+                lightSquare: 0xe2e8f0, darkSquare: 0x475569,
+                whitePiece: 0xffffff, blackPiece: 0x0f172a,
+                boardBorder: 0x1e293b, bg: 0x090d16
+            },
+            glass: {
+                lightSquare: 0x818cf8, darkSquare: 0x3730a3,
+                whitePiece: 0xffffff, blackPiece: 0x1e1b4b,
+                boardBorder: 0x312e81, bg: 0x070a12
+            }
+        };
+        let currentTheme = THEMES.classic;
+
+        /* =========================================================================
+           SOUND EFFECTS (TONE.JS SYNTHS)
+           ========================================================================= */
+        const moveSynth = new Tone.MembraneSynth().toDestination();
+        const captureSynth = new Tone.MetalSynth().toDestination();
+        const checkSynth = new Tone.PolySynth().toDestination();
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                if (Tone.context.state !== 'running') Tone.start();
+                if (type === 'move') moveSynth.triggerAttackRelease("C2", "8n");
+                else if (type === 'capture') captureSynth.triggerAttackRelease("G3", "16n");
+                else if (type === 'check') checkSynth.triggerAttackRelease(["C4", "E4", "G4"], "8n");
+            } catch (e) { console.error(e); }
+        }
+
+        /* =========================================================================
+           THREE.JS INITIALIZATION
+           ========================================================================= */
+        function init3D() {
+            const container = document.getElementById('webgl-container');
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(currentTheme.bg);
+            scene.fog = new THREE.FogExp2(currentTheme.bg, 0.025);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 8.5, 8.5);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevents camera going below ground
+            controls.minDistance = 4;
+            controls.maxDistance = 18;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 12, 7);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 25;
+            dirLight.shadow.camera.left = -6;
+            dirLight.shadow.camera.right = 6;
+            dirLight.shadow.camera.top = 6;
+            dirLight.shadow.camera.bottom = -6;
+            scene.add(dirLight);
+
+            // Groups
+            boardGroup = new THREE.Group();
+            piecesGroup = new THREE.Group();
+            highlightGroup = new THREE.Group();
+            scene.add(boardGroup);
+            scene.add(piecesGroup);
+            scene.add(highlightGroup);
+
+            // Build Board & Pieces
+            buildBoard();
+            buildPiecesFromBoard();
+
+            // Window Resize
+            window.addEventListener('resize', onWindowResize);
+
+            // Raycasting Interaction
+            setupRaycaster();
+
+            // Start Animation Loop
+            animate();
+        }
+
+        /* =========================================================================
+           BOARD PROCEDURAL MESH CREATION
+           ========================================================================= */
+        function buildBoard() {
+            // Clear existing board
+            while(boardGroup.children.length > 0) boardGroup.remove(boardGroup.children[0]);
+            squareMeshes = {};
+
+            const squareGeo = new THREE.BoxGeometry(1, 0.2, 1);
+            
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const isLight = (r + c) % 2 === 0;
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: isLight ? currentTheme.lightSquare : currentTheme.darkSquare,
+                        roughness: 0.3,
+                        metalness: 0.1
+                    });
+                    const square = new THREE.Mesh(squareGeo, mat);
+                    square.position.set(c - 3.5, -0.1, r - 3.5);
+                    square.receiveShadow = true;
+
+                    const file = String.fromCharCode(97 + c);
+                    const rank = 8 - r;
+                    const sqName = file + rank;
+
+                    square.userData = { squareName: sqName };
+                    squareMeshes[sqName] = square;
+                    boardGroup.add(square);
+                }
+            }
+
+            // Board Border Base
+            const borderGeo = new THREE.BoxGeometry(9, 0.3, 9);
+            const borderMat = new THREE.MeshStandardMaterial({
+                color: currentTheme.boardBorder,
+                roughness: 0.5,
+                metalness: 0.2
+            });
+            const border = new THREE.Mesh(borderGeo, borderMat);
+            border.position.set(0, -0.35, 0);
+            border.receiveShadow = true;
+            boardGroup.add(border);
+        }
+
+        /* =========================================================================
+           PROCEDURAL 3D PIECE GEOMETRIES
+           ========================================================================= */
+        function createPieceMesh(type, color) {
+            const pieceColor = color === 'w' ? currentTheme.whitePiece : currentTheme.blackPiece;
+            const mat = new THREE.MeshStandardMaterial({
+                color: pieceColor,
+                roughness: 0.25,
+                metalness: 0.2
+            });
+
+            let geom;
+            // Procedural Lathe/Buffer Geometries for Chess Pieces
+            switch (type.toLowerCase()) {
+                case 'p': // Pawn
+                    geom = createLatheGeometry([
+                        new THREE.Vector2(0, 0),
+                        new THREE.Vector2(0.3, 0.05),
+                        new THREE.Vector2(0.2, 0.15),
+                        new THREE.Vector2(0.12, 0.4),
+                        new THREE.Vector2(0.18, 0.55),
+                        new THREE.Vector2(0, 0.7)
+                    ]);
+                    break;
+                case 'r': // Rook
+                    geom = createLatheGeometry([
+                        new THREE.Vector2(0, 0),
+                        new THREE.Vector2(0.35, 0.08),
+                        new THREE.Vector2(0.25, 0.2),
+                        new THREE.Vector2(0.22, 0.65),
+                        new THREE.Vector2(0.3, 0.75),
+                        new THREE.Vector2(0, 0.75)
+                    ]);
+                    break;
+                case 'n': // Knight
+                    return createKnightMesh(mat);
+                case 'b': // Bishop
+                    geom = createLatheGeometry([
+                        new THREE.Vector2(0, 0),
+                        new THREE.Vector2(0.33, 0.08),
+                        new THREE.Vector2(0.22, 0.25),
+                        new THREE.Vector2(0.15, 0.65),
+                        new THREE.Vector2(0.2, 0.8),
+                        new THREE.Vector2(0.05, 0.95),
+                        new THREE.Vector2(0, 1.0)
+                    ]);
+                    break;
+                case 'q': // Queen
+                    geom = createLatheGeometry([
+                        new THREE.Vector2(0, 0),
+                        new THREE.Vector2(0.38, 0.08),
+                        new THREE.Vector2(0.26, 0.25),
+                        new THREE.Vector2(0.18, 0.75),
+                        new THREE.Vector2(0.28, 0.95),
+                        new THREE.Vector2(0, 1.1)
+                    ]);
+                    break;
+                case 'k': // King
+                    geom = createLatheGeometry([
+                        new THREE.Vector2(0, 0),
+                        new THREE.Vector2(0.38, 0.08),
+                        new THREE.Vector2(0.28, 0.25),
+                        new THREE.Vector2(0.2, 0.8),
+                        new THREE.Vector2(0.3, 1.05),
+                        new THREE.Vector2(0, 1.2)
+                    ]);
+                    break;
+                default:
+                    geom = new THREE.CylinderGeometry(0.2, 0.3, 0.6, 16);
+            }
+
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.castShadow = shadowEnabled;
+            mesh.receiveShadow = shadowEnabled;
+            return mesh;
+        }
+
+        function createLatheGeometry(points) {
+            return new THREE.LatheGeometry(points, 24);
+        }
+
+        function createKnightMesh(mat) {
+            // Composite group for Knight using standard BufferGeometries
+            const group = new THREE.Group();
+
+            const baseGeo = createLatheGeometry([
+                new THREE.Vector2(0, 0),
+                new THREE.Vector2(0.32, 0.08),
+                new THREE.Vector2(0.22, 0.2),
+                new THREE.Vector2(0.18, 0.4),
+                new THREE.Vector2(0, 0.45)
+            ]);
+            const baseMesh = new THREE.Mesh(baseGeo, mat);
+            baseMesh.castShadow = shadowEnabled;
+            baseMesh.receiveShadow = shadowEnabled;
+            group.add(baseMesh);
+
+            const headGeo = new THREE.BoxGeometry(0.24, 0.42, 0.35);
+            const headMesh = new THREE.Mesh(headGeo, mat);
+            headMesh.position.set(0, 0.52, 0.05);
+            headMesh.rotation.x = 0.25;
+            headMesh.castShadow = shadowEnabled;
+            headMesh.receiveShadow = shadowEnabled;
+            group.add(headMesh);
+
+            const snoutGeo = new THREE.BoxGeometry(0.2, 0.22, 0.25);
+            const snoutMesh = new THREE.Mesh(snoutGeo, mat);
+            snoutMesh.position.set(0, 0.48, 0.22);
+            snoutMesh.castShadow = shadowEnabled;
+            snoutMesh.receiveShadow = shadowEnabled;
+            group.add(snoutMesh);
+
+            return group;
+        }
+
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.castShadow = shadowEnabled;
+            mesh.receiveShadow = shadowEnabled;
+            return mesh;
+        }
+
+        function createLatheGeometry(points) {
+            return new THREE.LatheGeometry(points, 24);
+        }
+
+        function createKnightGeometry() {
+            // Simplified composite shape for Knight
+            const group = new THREE.Geometry ? new THREE.Geometry() : null; // Fallback
+            const base = new THREE.CylinderGeometry(0.3, 0.35, 0.2, 16);
+            const head = new THREE.BoxGeometry(0.25, 0.45, 0.35);
+            head.translate(0, 0.4, 0.05);
+            return base; // Default lathe style for high compatibility
+        }
+
+        /* =========================================================================
+           BOARD REFRESH & PIECE PLACEMENT
+           ========================================================================= */
+        function buildPiecesFromBoard() {
+            // Clear pieces
+            while(piecesGroup.children.length > 0) piecesGroup.remove(piecesGroup.children[0]);
+            pieceMeshes = {};
+
+            const board = game.board();
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = board[r][c];
+                    if (piece) {
+                        const sqName = String.fromCharCode(97 + c) + (8 - r);
+                        const pieceMesh = createPieceMesh(piece.type, piece.color);
+                        pieceMesh.position.set(c - 3.5, 0, r - 3.5);
+                        
+                        // Rotate black pieces to face player
+                        if (piece.color === 'b') pieceMesh.rotation.y = Math.PI;
+
+                        pieceMesh.userData = { square: sqName, type: piece.type, color: piece.color };
+                        pieceMeshes[sqName] = pieceMesh;
+                        piecesGroup.add(pieceMesh);
+                    }
+                }
+            }
+
+            updateCapturedDisplays();
+            updateStatusDisplays();
+        }
+
+        /* =========================================================================
+           INTERACTION & RAYCASTING
+           ========================================================================= */
+        function setupRaycaster() {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            window.addEventListener('click', (e) => {
+                // Ignore clicks on UI overlays
+                if (e.target.closest('#settings-drawer') || e.target.closest('header') || e.target.closest('#gemini-modal-backdrop')) return;
+
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(boardGroup.children);
+
+                if (intersects.length > 0) {
+                    const clickedSquare = intersects[0].object.userData.squareName;
+                    if (clickedSquare) handleSquareClick(clickedSquare);
+                }
+            });
+        }
+
+        function handleSquareClick(square) {
+            if (isAiThinking || game.game_over()) return;
+
+            // If a piece is already selected
+            if (selectedSquare) {
+                // Check if clicking valid move square
+                if (validMoveSquares.includes(square)) {
+                    executeMove(selectedSquare, square);
+                    clearHighlights();
+                    selectedSquare = null;
+                    return;
+                }
+            }
+
+            // Otherwise, select piece if it matches turn
+            const piece = game.get(square);
+            if (piece && piece.color === game.turn()) {
+                if (isAiMode && piece.color !== playerColor) return; // Prevent controlling AI pieces
+                
+                selectedSquare = square;
+                const moves = game.moves({ square: square, verbose: true });
+                validMoveSquares = moves.map(m => m.to);
+                
+                highlightSquares(square, validMoveSquares);
+            } else {
+                clearHighlights();
+                selectedSquare = null;
+            }
+        }
+
+        /* =========================================================================
+           MOVE EXECUTION & ANIMATION
+           ========================================================================= */
+        function executeMove(from, to) {
+            const move = game.move({ from, to, promotion: 'q' });
+            if (!move) return;
+
+            playSound(move.captured ? 'capture' : 'move');
+
+            // Rebuild 3D pieces to match move
+            buildPiecesFromBoard();
+
+            // Trigger Check Sound if needed
+            if (game.in_check()) playSound('check');
+
+            // AI Turn Handler
+            if (isAiMode && game.turn() !== playerColor && !game.game_over()) {
+                isAiThinking = true;
+                setTimeout(makeAiMove, 600);
+            }
+        }
+
+        function makeAiMove() {
+            const moves = game.moves({ verbose: true });
+            if (moves.length === 0) return;
+
+            let chosenMove;
+            if (aiDifficulty === 1) {
+                // Random
+                chosenMove = moves[Math.floor(Math.random() * moves.length)];
+            } else {
+                // Simple capture priority evaluation
+                const captureMoves = moves.filter(m => m.captured);
+                chosenMove = captureMoves.length > 0 ? captureMoves[Math.floor(Math.random() * captureMoves.length)] : moves[Math.floor(Math.random() * moves.length)];
+            }
+
+            executeMove(chosenMove.from, chosenMove.to);
+            isAiThinking = false;
+        }
+
+        /* =========================================================================
+           HIGHLIGHTS & VISUAL INDICATORS
+           ========================================================================= */
+        function highlightSquares(selected, targets) {
+            clearHighlights();
+
+            // Selection Glow Marker
+            const selectedMesh = squareMeshes[selected];
+            if (selectedMesh) {
+                const ringGeo = new THREE.RingGeometry(0.3, 0.45, 32);
+                ringGeo.rotateX(-Math.PI / 2);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0x6366f1, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.copy(selectedMesh.position);
+                ring.position.y = 0.02;
+                highlightGroup.add(ring);
+            }
+
+            // Destination Targets
+            targets.forEach(sq => {
+                const targetMesh = squareMeshes[sq];
+                if (targetMesh) {
+                    const dotGeo = new THREE.CircleGeometry(0.18, 32);
+                    dotGeo.rotateX(-Math.PI / 2);
+                    const dotMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+                    const dot = new THREE.Mesh(dotGeo, dotMat);
+                    dot.position.copy(targetMesh.position);
+                    dot.position.y = 0.02;
+                    highlightGroup.add(dot);
+                }
+            });
+        }
+
+        function clearHighlights() {
+            while(highlightGroup.children.length > 0) highlightGroup.remove(highlightGroup.children[0]);
+        }
+
+        /* =========================================================================
+           STATUS & CAPTURED PIECES UPDATES
+           ========================================================================= */
+        function updateStatusDisplays() {
+            const turn = game.turn() === 'w' ? "White" : "Black";
+            document.getElementById('turn-text').textContent = `${turn}'s Turn`;
+            document.getElementById('turn-text-mobile').textContent = turn;
+            document.getElementById('turn-indicator').className = `w-3.5 h-3.5 rounded-full border-2 border-slate-700 ${game.turn() === 'w' ? 'bg-white' : 'bg-slate-900'}`;
+
+            // Check alerts
+            const checkBadge = document.getElementById('check-badge');
+            const checkBadgeMobile = document.getElementById('check-badge-mobile');
+            if (game.in_check()) {
+                checkBadge.classList.remove('hidden');
+                checkBadgeMobile.classList.remove('hidden');
+            } else {
+                checkBadge.classList.add('hidden');
+                checkBadgeMobile.classList.add('hidden');
+            }
+
+            // Notation history
+            updateMoveHistory();
+            document.getElementById('input-fen').value = game.fen();
+        }
+
+        function updateCapturedDisplays() {
+            const history = game.history({ verbose: true });
+            const capturedW = [];
+            const capturedB = [];
+
+            const pieceIcons = { p: '♟', r: '♜', n: '♞', b: '♝', q: '♛' };
+
+            history.forEach(m => {
+                if (m.captured) {
+                    if (m.color === 'w') capturedB.push(pieceIcons[m.captured]);
+                    else capturedW.push(pieceIcons[m.captured]);
+                }
+            });
+
+            document.getElementById('captured-white').innerHTML = capturedW.map(i => `<span>${i}</span>`).join('') || '-';
+            document.getElementById('captured-black').innerHTML = capturedB.map(i => `<span>${i}</span>`).join('') || '-';
+        }
+
+        function updateMoveHistory() {
+            const history = game.history();
+            const container = document.getElementById('move-history-container');
+            if (history.length === 0) {
+                container.innerHTML = '<div class="col-span-2 text-slate-500 italic text-center py-4">No moves played yet.</div>';
+                return;
+            }
+
+            let html = '';
+            for (let i = 0; i < history.length; i += 2) {
+                const moveNum = Math.floor(i / 2) + 1;
+                const whiteMove = history[i];
+                const blackMove = history[i + 1] || '';
+                html += `<div><span class="text-slate-500">${moveNum}.</span> ${whiteMove}</div><div>${blackMove}</div>`;
+            }
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        /* =========================================================================
+           GEMINI AI GAME ANALYSIS INTEGRATION
+           ========================================================================= */
+        async function runGeminiAnalysis() {
+            const modalBackdrop = document.getElementById('gemini-modal-backdrop');
+            const modalBody = document.getElementById('gemini-report-body');
+
+            // Open Modal in Loading state
+            modalBackdrop.classList.remove('opacity-0', 'pointer-events-none');
+            modalBody.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-16 gap-3 text-indigo-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl"></i>
+                    <span class="text-xs font-bold text-slate-300 tracking-wider uppercase">Evaluating Board Strategy...</span>
+                </div>
+            `;
+
+            const apiKey = document.getElementById('input-gemini-key').value.trim() || "";
+            const analysisType = document.getElementById('select-analysis-type').value;
+
+            const systemPrompt = "You are a world-class Grandmaster chess commentator and tactical analyst. Provide clear, professional, structured Markdown evaluation including positional diagnostics, threat alerts, best moves candidate recommendation, and blunder warnings.";
+            const userQuery = `
+Analyze the following chess position:
+FEN: ${game.fen()}
+Move History: ${game.pgn()}
+Turn: ${game.turn() === 'w' ? 'White' : 'Black'}
+Analysis Mode: ${analysisType}
+
+Please provide:
+1. Positional Evaluation Score (e.g. +1.2 or -0.5)
+2. Tactical Candidates & Key Threats
+3. Grandmaster Recommended Move
+4. Strategic Plan for Current Side
+            `;
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: userQuery }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    })
+                });
+
+                const data = await response.json();
+                const reportText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate analysis at this moment.";
+
+                // Parse Markdown using marked.js
+                modalBody.innerHTML = marked.parse(reportText);
+            } catch (err) {
+                modalBody.innerHTML = `
+                    <div class="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                        <strong>Analysis Request Failed:</strong> ${err.message}. Please verify your network or Gemini API key.
+                    </div>
+                `;
+            }
+        }
+
+        /* =========================================================================
+           DRAWER & UI EVENT LISTENERS
+           ========================================================================= */
+        function setupUIEvents() {
+            const drawer = document.getElementById('settings-drawer');
+            const backdrop = document.getElementById('drawer-backdrop');
+
+            const openDrawer = () => {
+                drawer.classList.remove('translate-x-full');
+                backdrop.classList.remove('opacity-0', 'pointer-events-none');
+            };
+
+            const closeDrawer = () => {
+                drawer.classList.add('translate-x-full');
+                backdrop.classList.add('opacity-0', 'pointer-events-none');
+            };
+
+            // Toggle Settings Drawer
+            document.getElementById('btn-toggle-settings').addEventListener('click', openDrawer);
+            document.getElementById('btn-close-drawer').addEventListener('click', closeDrawer);
+            backdrop.addEventListener('click', closeDrawer);
+
+            // Tab Switcher
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => {
+                        b.className = 'tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/5 whitespace-nowrap';
+                    });
+                    btn.className = 'tab-btn flex-1 py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 text-indigo-400 bg-indigo-600/20 border border-indigo-500/30 whitespace-nowrap';
+
+                    const targetTab = btn.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                    document.getElementById(targetTab).classList.remove('hidden');
+                });
+            });
+
+            // Game Mode Toggle
+            document.getElementById('mode-pvp').addEventListener('click', () => {
+                isAiMode = false;
+                document.getElementById('ai-settings-group').classList.add('hidden');
+                document.getElementById('mode-pvp').className = 'glass-button p-3 rounded-xl text-left border-indigo-500/50 bg-indigo-600/10';
+                document.getElementById('mode-ai').className = 'glass-button p-3 rounded-xl text-left';
+            });
+
+            document.getElementById('mode-ai').addEventListener('click', () => {
+                isAiMode = true;
+                document.getElementById('ai-settings-group').classList.remove('hidden');
+                document.getElementById('mode-ai').className = 'glass-button p-3 rounded-xl text-left border-indigo-500/50 bg-indigo-600/10';
+                document.getElementById('mode-pvp').className = 'glass-button p-3 rounded-xl text-left';
+            });
+
+            // Theme Switcher
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const themeKey = btn.getAttribute('data-theme');
+                    currentTheme = THEMES[themeKey];
+                    scene.background.set(currentTheme.bg);
+                    scene.fog.color.set(currentTheme.bg);
+                    buildBoard();
+                    buildPiecesFromBoard();
+                });
+            });
+
+            // Camera Presets
+            document.getElementById('cam-preset-p1').addEventListener('click', () => setCameraPreset(0, 8.5, 8.5));
+            document.getElementById('cam-preset-top').addEventListener('click', () => setCameraPreset(0, 12, 0.1));
+            document.getElementById('cam-preset-side').addEventListener('click', () => setCameraPreset(9, 5, 0));
+            document.getElementById('btn-quick-cam').addEventListener('click', () => {
+                const angle = camera.position.z > 0 ? -8.5 : 8.5;
+                setCameraPreset(0, 8.5, angle);
+            });
+
+            // Undo / Reset
+            document.getElementById('btn-quick-undo').addEventListener('click', () => {
+                game.undo();
+                if (isAiMode) game.undo(); // Undo both player and AI move
+                buildPiecesFromBoard();
+            });
+
+            document.getElementById('btn-reset-game').addEventListener('click', () => {
+                game.reset();
+                buildPiecesFromBoard();
+                closeDrawer();
+            });
+
+            // Audio SFX Toggles
+            document.getElementById('toggle-sfx').addEventListener('change', (e) => soundEnabled = e.target.checked);
+            document.getElementById('btn-test-sound').addEventListener('click', () => playSound('capture'));
+
+            // Gemini Analysis
+            document.getElementById('btn-run-analysis').addEventListener('click', () => {
+                closeDrawer();
+                runGeminiAnalysis();
+            });
+
+            document.getElementById('btn-close-gemini-modal').addEventListener('click', () => {
+                document.getElementById('gemini-modal-backdrop').classList.add('opacity-0', 'pointer-events-none');
+            });
+
+            // Copy PGN/FEN
+            document.getElementById('btn-copy-fen').addEventListener('click', () => {
+                navigator.clipboard.writeText(game.fen());
+            });
+            document.getElementById('btn-copy-pgn').addEventListener('click', () => {
+                navigator.clipboard.writeText(game.pgn());
+            });
+        }
+
+        function setCameraPreset(x, y, z) {
+            controls.reset();
+            camera.position.set(x, y, z);
+            camera.lookAt(0, 0, 0);
+        }
+
+        /* =========================================================================
+           CLOCK & RENDER LOOP
+           ========================================================================= */
+        function startTimer() {
+            setInterval(() => {
+                if (!game.game_over()) {
+                    secondsElapsed++;
+                    const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+                    const secs = String(secondsElapsed % 60).padStart(2, '0');
+                    document.getElementById('game-timer').textContent = `${mins}:${secs}`;
+                }
+            }, 1000);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize App on Window Load
+        window.onload = () => {
+            init3D();
+            setupUIEvents();
+            startTimer();
+        };
+    </script>
+</body>
+</html>
